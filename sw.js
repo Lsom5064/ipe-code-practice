@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'ipe-code-practice-v2-notebooks-pages';
+const CACHE = 'ipe-code-practice-v3-enter-submit-pages';
 const PREFIX = 'ipe-code-practice-';
 const ASSETS = ['./','./index.html','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{
