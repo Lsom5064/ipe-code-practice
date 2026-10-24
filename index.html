@@ -23,6 +23,35 @@
 
 .result-title svg{width:23px;height:23px;flex:none}
 
+/* Long source lines and a problem-local notebook, including touch/stylus input. */
+.brand-mark{flex:none;white-space:nowrap}.brand>span:last-child{min-width:0}
+.code-head{gap:10px;flex-wrap:wrap}.code-tools{flex-wrap:wrap;margin-left:auto}
+.code-tools button{min-height:32px;min-width:32px;width:auto;height:auto;padding:4px 7px;white-space:nowrap}
+.code-tools .code-option{font-family:inherit;font-size:11px}.code-tools [aria-pressed=true]{background:#526a9a;color:#fff}
+.code-block.code-wrap pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal}
+.code-block.code-wrap .code-text{white-space:inherit;overflow-wrap:inherit;word-break:inherit}
+.code-block{max-width:100%;min-width:0}.code-block pre{max-width:100%}
+.scratchpad{margin-top:20px;border:1px solid var(--line);border-radius:15px;background:var(--paper);padding:15px;min-width:0}
+.scratch-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.scratch-head b{font-size:14px}.scratch-head small{display:block;font-size:11px;color:var(--muted)}
+.scratch-head .secondary{min-height:40px;font-size:12px;padding:8px 12px}.scratch-head .text-btn{font-size:12px;padding:7px}
+.notebook-tabs{margin:16px 0 14px}.notebook-tabs .tab{flex:1;font-size:12px;padding:8px;min-height:40px}
+.scratch-text{display:block;min-height:230px;resize:vertical;width:100%;border:1px solid var(--line);border-radius:11px;background:var(--bg);color:var(--ink);padding:14px;font:16px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0}
+.ink-tools{display:grid;gap:9px;margin:8px 0 12px}.ink-tools .row{gap:7px}
+.ink-tools button{font-size:12px;min-height:38px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 11px}
+.ink-tools button[aria-pressed=true]{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue);color:var(--blue);background:var(--blue-light)}
+.ink-tools .ink-color{width:34px;min-height:34px;padding:5px;background:var(--ink-color);border:5px solid var(--paper);border-radius:50%;outline:1px solid var(--line)}
+.ink-width{margin-left:auto;font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}.ink-width select{max-width:85px;background:var(--paper);color:var(--ink);border:1px solid var(--line);padding:7px;border-radius:8px}
+.ink-paper{border:1px solid #ccd6e8;border-radius:10px;background-color:#fff;background-image:linear-gradient(#d8e0ee50 1px,transparent 1px),linear-gradient(90deg,#d8e0ee50 1px,transparent 1px);background-size:24px 24px;overflow:hidden}
+.ink-paper canvas{display:block;width:100%;height:auto;aspect-ratio:10/7;touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.ink-footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;font-size:11px;color:var(--muted);margin-top:10px}
+.ink-footer label{display:flex;gap:6px;align-items:center}.ink-footer input{width:18px;height:18px;accent-color:var(--blue)}
+.ink-tip{color:var(--muted);font-size:11px;line-height:1.7;margin-top:10px}.notebook-code{margin:0 0 12px}.notebook-code .code-block{margin-top:3px}
+.scratchpad.is-large{position:fixed;inset:18px;max-width:1000px;margin:0 auto;z-index:45;overflow:auto;box-shadow:0 0 0 100vmax #17243c55,0 16px 70px #17243c33;padding:22px;overscroll-behavior:contain}
+.scratchpad.is-large .scratch-head{position:sticky;top:-22px;padding:12px 0;background:var(--paper);z-index:1}
+.scratchpad.is-large .scratch-text{min-height:55dvh}
+@media(max-width:700px){.code-head>span:first-child{font-size:10px}.code-tools{gap:5px}.code-tools button{font-size:11px;padding:4px 6px}.code-head{padding:8px 10px}.scratchpad{padding:12px}.scratch-head{gap:9px}.scratch-head>.row{gap:3px}.scratchpad.is-large{inset:8px;padding:15px}.scratchpad.is-large .scratch-head{top:-15px}.ink-tools button{padding:7px 9px}.ink-footer{font-size:10px}.ink-width{margin-left:0}}
+
 </style>
 </head>
 <body>
@@ -39,11 +68,220 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
   <script>
 (() => {
   'use strict';
+  // Only whitespace outside string/comment tokens changes. In particular, the
+  // semicolons in for (...) and escaped newlines in strings remain untouched.
+  const lexer=/\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|#[^\r\n]*|\s+|[{};()]|[^\s{};()"'\/#]+|[\s\S]/g;
+  function formatCode(source,language) {
+    if(language!=='c'&&language!=='java')return source;
+    const parts=String(source).match(lexer)||[],lines=[];
+    let line='',indent=0,parens=0,closed=false;
+    const flush=()=>{if(line.trim())lines.push('  '.repeat(indent)+line.trim());line='';closed=false;};
+    for(const token of parts){
+      if(/^\s+$/.test(token)){if(line&&!line.endsWith(' '))line+=' ';continue;}
+      if(closed&&![';','}',')'].includes(token)&&!token.startsWith(',')&&!token.startsWith(']')){
+        if(/^(else|catch|finally)\b/.test(token)){line=line.trimEnd()+' ';closed=false;}else flush();
+      }
+      if(token==='{'){
+        line=line.trimEnd()+(line.trim()?' ':'')+'{';flush();indent++;
+      }else if(token==='}'){
+        flush();indent=Math.max(0,indent-1);line='}';closed=true;
+      }else if(token===';'){
+        line=line.trimEnd()+';';if(parens===0)flush();else line+=' ';
+      }else if(token==='('){line+=token;parens++;}
+      else if(token===')'){line=line.trimEnd()+token;parens=Math.max(0,parens-1);}
+      else if(token.startsWith('//')||token.startsWith('#')){line+=token;flush();}
+      else line+=token;
+    }
+    flush();return lines.join('\n');
+  }
+  window.CodeDisplay={formatCode};
+})();
+
+</script>
+  <script>
+(() => {
+  'use strict';
+  const COLORS = ['#17243c','#2354df','#d44354','#168469'];
+  const WIDTH = 1000, HEIGHT = 700;
+  const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
+  function cleanPage(value,id) {
+    if(!value||!Array.isArray(value.strokes)||!Number.isFinite(value.updatedAt)) return null;
+    const strokes=[];
+    for(const s of value.strokes.slice(0,4000)) {
+      if(!s||!['pen','marker','eraser'].includes(s.tool)||!COLORS.includes(s.color)||!Number.isFinite(s.width)||!Array.isArray(s.points)) continue;
+      const points=s.points.slice(0,5000).filter(p=>Array.isArray(p)&&p.length>=2&&p.slice(0,2).every(Number.isFinite)).map(p=>[clamp(p[0],0,1),clamp(p[1],0,1),Number.isFinite(p[2])?clamp(p[2],.1,1):.5]);
+      if(points.length) strokes.push({tool:s.tool,color:s.color,width:clamp(s.width,.0005,.12),points});
+    }
+    return {id,updatedAt:Math.max(0,value.updatedAt),strokes};
+  }
+  class Timeline {
+    constructor(strokes=[]) { this.strokes=strokes;this.past=[];this.future=[]; }
+    change(next) { this.past.push(this.strokes);if(this.past.length>60)this.past.shift();this.strokes=next;this.future=[]; }
+    undo() { if(!this.past.length)return false;this.future.push(this.strokes);this.strokes=this.past.pop();return true; }
+    redo() { if(!this.future.length)return false;this.past.push(this.strokes);this.strokes=this.future.pop();return true; }
+  }
+  const FALLBACK='ipe-code-ink:';
+  const JOURNAL='ipe-code-ink-pending';
+  let database,writing=Promise.resolve();
+  function db() {
+    if(!database) database=new Promise((resolve,reject)=>{
+      if(!window.indexedDB){reject(new Error('IndexedDB unavailable'));return;}
+      const r=indexedDB.open('ipe-code-practice-notebooks-v1',1);
+      r.onupgradeneeded=()=>r.result.createObjectStore('pages',{keyPath:'id'});
+      r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);
+      r.onblocked=()=>reject(new Error('다른 탭의 필기 저장소를 닫은 뒤 다시 시도하세요.'));
+    });
+    return database;
+  }
+  async function transaction(mode,action) {
+    const database=await db();
+    return new Promise((resolve,reject)=>{
+      const tx=database.transaction('pages',mode),r=action(tx.objectStore('pages'));
+      tx.oncomplete=()=>resolve(r.result);tx.onerror=tx.onabort=()=>reject(tx.error||new Error('필기를 저장하지 못했습니다.'));
+    });
+  }
+  const fallbackGet=id=>{try{return JSON.parse(localStorage.getItem(FALLBACK+id)||'null');}catch{return null;}};
+  const pending=()=>{try{return JSON.parse(localStorage.getItem(JOURNAL)||'null');}catch{return null;}};
+  const store={
+    async get(id) {
+      await writing.catch(()=>{});
+      let page;try{page=await transaction('readonly',s=>s.get(id));}catch{page=fallbackGet(id);}
+      const journal=pending();if(journal?.id===id&&(!page||journal.updatedAt>page.updatedAt))page=journal;
+      return cleanPage(page,id)||{id,updatedAt:0,strokes:[]};
+    },
+    put(page) {
+      // A synchronous journal protects the last completed stroke during page close.
+      try{localStorage.setItem(JOURNAL,JSON.stringify(page));}catch{}
+      const write=async()=>{
+        try{await transaction('readwrite',s=>s.put(page));}catch{
+          localStorage.setItem(FALLBACK+page.id,JSON.stringify(page));
+        }
+        const journal=pending();if(journal?.id===page.id&&journal.updatedAt===page.updatedAt){try{localStorage.removeItem(JOURNAL);}catch{}}
+      };
+      writing=writing.catch(()=>{}).then(write);return writing;
+    },
+    async all() {
+      await writing.catch(()=>{});
+      let pages=[];try{pages=await transaction('readonly',s=>s.getAll());}catch{}
+      const merged=new Map(pages.map(p=>[p.id,p]));
+      for(let i=0;i<localStorage.length;i++){
+        const key=localStorage.key(i);if(!key?.startsWith(FALLBACK))continue;
+        const page=fallbackGet(key.slice(FALLBACK.length));if(page?.id&&(!merged.has(page.id)||page.updatedAt>merged.get(page.id).updatedAt))merged.set(page.id,page);
+      }
+      const journal=pending();if(journal?.id&&(!merged.has(journal.id)||journal.updatedAt>merged.get(journal.id).updatedAt))merged.set(journal.id,journal);
+      return [...merged.values()];
+    },
+    async merge(pages,knownIds) {
+      if(!Array.isArray(pages))return 0;
+      let count=0;
+      for(const value of pages){
+        if(!knownIds.has(value?.id))continue;
+        const clean=cleanPage(value,value.id);if(!clean)continue;
+        const old=await store.get(clean.id);if(clean.updatedAt>old.updatedAt){await store.put(clean);count++;}
+      }
+      return count;
+    }
+  };
+  let preferences={tool:'pen',color:COLORS[0],size:3,finger:true};
+  let active=null;
+  function paint(ctx,stroke) {
+    const pts=stroke.points;if(!pts.length)return;
+    ctx.save();ctx.globalCompositeOperation=stroke.tool==='eraser'?'destination-out':'source-over';
+    ctx.globalAlpha=stroke.tool==='marker'?.22:1;
+    ctx.strokeStyle=ctx.fillStyle=stroke.color;ctx.lineCap=ctx.lineJoin='round';
+    const radius=p=>stroke.width*WIDTH*(stroke.tool==='eraser'?3:stroke.tool==='marker'?4:1)*(.6+p*.8);
+    if(pts.length===1){const p=pts[0];ctx.beginPath();ctx.arc(p[0]*WIDTH,p[1]*HEIGHT,radius(p[2])/2,0,Math.PI*2);ctx.fill();}
+    else for(let i=1;i<pts.length;i++){
+      const a=pts[i-1],b=pts[i];ctx.lineWidth=radius((a[2]+b[2])/2);ctx.beginPath();ctx.moveTo(a[0]*WIDTH,a[1]*HEIGHT);ctx.lineTo(b[0]*WIDTH,b[1]*HEIGHT);ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function mount(root,id,notify=()=>{}) {
+    dispose();if(!root)return;
+    root.innerHTML=`<div class="ink-tools" role="group" aria-label="그림 도구"><div class="row wrap">${[['pen','펜'],['marker','형광펜'],['eraser','지우개']].map(([tool,name])=>`<button type="button" data-ink-tool="${tool}" aria-pressed="${preferences.tool===tool}">${name}</button>`).join('')}</div><div class="row wrap">${COLORS.map((color,i)=>`<button type="button" class="ink-color" data-ink-color="${color}" style="--ink-color:${color}" aria-label="${['검정','파랑','빨강','초록'][i]} 펜" aria-pressed="${preferences.color===color}"></button>`).join('')}<label class="ink-width">굵기 <select aria-label="펜 굵기"><option value="2">얇게</option><option value="3">보통</option><option value="6">굵게</option></select></label></div><div class="row wrap"><button type="button" data-ink-action="undo" disabled>실행 취소</button><button type="button" data-ink-action="redo" disabled>다시 실행</button><button type="button" data-ink-action="clear" disabled>전체 지우기</button><button type="button" data-ink-action="download">그림 저장</button></div></div><div class="ink-paper"><canvas width="1000" height="700" aria-label="이 문제의 손필기 그림장. Apple Pencil, 터치펜, 손가락, 마우스로 그릴 수 있습니다."></canvas></div><div class="ink-footer"><label><input type="checkbox" data-ink-finger ${preferences.finger?'checked':''}> 손가락으로도 그리기</label><span data-ink-status role="status">필기 불러오는 중…</span></div><p class="ink-tip">Apple Pencil·터치펜을 사용할 때 손가락 그리기를 끄면 손바닥 오입력을 줄일 수 있습니다. 페이지는 종이 바깥에서 스크롤하세요.</p>`;
+    const canvas=root.querySelector('canvas'),ctx=canvas.getContext('2d');
+    root.querySelector('select').value=String(preferences.size);
+    const status=root.querySelector('[data-ink-status]');
+    const session={root,id,disposed:false,loaded:false,stroke:null,pointer:null,history:new Timeline(),writes:Promise.resolve(),updatedAt:0};active=session;
+    let lastPenAt=0,clearPending=false;
+    const buttons=()=>{
+      root.querySelector('[data-ink-action=undo]').disabled=!session.history.past.length;
+      root.querySelector('[data-ink-action=redo]').disabled=!session.history.future.length;
+      root.querySelector('[data-ink-action=clear]').disabled=!session.history.strokes.length;
+    };
+    const redraw=()=>{ctx.clearRect(0,0,WIDTH,HEIGHT);session.history.strokes.forEach(s=>paint(ctx,s));if(session.stroke)paint(ctx,session.stroke);buttons();};
+    const persist=()=>{
+      const page={id,updatedAt:Math.max(Date.now(),session.updatedAt+1),strokes:session.history.strokes};session.updatedAt=page.updatedAt;
+      status.textContent='저장 중…';
+      try{localStorage.setItem(JOURNAL,JSON.stringify(page));}catch{}
+      session.writes=session.writes.catch(()=>{}).then(()=>store.put(page)).then(()=>{if(!session.disposed&&session.updatedAt===page.updatedAt)status.textContent='이 기기에 저장됨';}).catch(()=>{status.textContent='저장 실패 · 그림을 파일로 저장하세요';notify('필기 저장 공간을 확인하고 그림 저장 또는 백업을 이용하세요.');});
+    };
+    const point=e=>{const rect=canvas.getBoundingClientRect();return [clamp((e.clientX-rect.left)/rect.width,0,1),clamp((e.clientY-rect.top)/rect.height,0,1),e.pointerType==='pen'?clamp(e.pressure||.1,.1,1):.5];};
+    const finish=()=>{
+      if(!session.stroke)return;
+      session.history.change([...session.history.strokes,session.stroke]);session.stroke=null;session.pointer=null;clearPending=false;
+      root.querySelector('[data-ink-action=clear]').textContent='전체 지우기';redraw();persist();
+    };
+    session.finish=finish;
+    canvas.addEventListener('pointerdown',e=>{
+      if(!session.loaded||session.stroke||e.isPrimary===false||(e.pointerType==='mouse'&&e.button!==0))return;
+      if(session.history.strokes.length>=4000){notify('이 그림장이 가득 찼습니다. 그림 저장 후 새로 정리해 주세요.');return;}
+      if(e.pointerType==='pen')lastPenAt=Date.now();
+      if(e.pointerType==='touch'&&(!preferences.finger||Date.now()-lastPenAt<1000))return;
+      e.preventDefault();const rect=canvas.getBoundingClientRect();
+      session.pointer=e.pointerId;session.stroke={tool:preferences.tool,color:preferences.color,width:preferences.size/rect.width,points:[point(e)]};
+      canvas.setPointerCapture(e.pointerId);redraw();status.textContent='필기 중…';
+    });
+    canvas.addEventListener('pointermove',e=>{
+      if(!session.stroke||e.pointerId!==session.pointer)return;e.preventDefault();
+      const samples=e.getCoalescedEvents?.()||[e];
+      for(const sample of samples.length?samples:[e]){
+        const p=point(sample),a=session.stroke.points.at(-1);
+        if(Math.hypot(p[0]-a[0],p[1]-a[1])<.0005)continue;
+        if(session.stroke.points.length>=5000){finish();notify('긴 획을 저장했습니다. 펜을 떼고 이어 그리세요.');break;}
+        session.stroke.points.push(p);paint(ctx,{...session.stroke,points:[a,p]});
+      }
+    });
+    for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,e=>{if(e.pointerId===session.pointer)finish();});
+    root.addEventListener('click',e=>{
+      const target=e.target.closest('button');if(!target)return;
+      if(target.dataset.inkTool){preferences.tool=target.dataset.inkTool;root.querySelectorAll('[data-ink-tool]').forEach(b=>b.setAttribute('aria-pressed',b===target));}
+      if(target.dataset.inkColor){preferences.color=target.dataset.inkColor;root.querySelectorAll('[data-ink-color]').forEach(b=>b.setAttribute('aria-pressed',b===target));}
+      const action=target.dataset.inkAction;if(!action||!session.loaded)return;
+      finish();
+      if(action==='download'){
+        const image=document.createElement('canvas');image.width=WIDTH;image.height=HEIGHT;const c=image.getContext('2d');c.fillStyle='#ffffff';c.fillRect(0,0,WIDTH,HEIGHT);c.drawImage(canvas,0,0);
+        const a=document.createElement('a');a.download=`코드한문제_${id}_그림장.png`;a.href=image.toDataURL('image/png');a.click();return;
+      }
+      if(action==='clear'){
+        if(!clearPending){clearPending=true;target.textContent='한 번 더 눌러 지우기';return;}
+        session.history.change([]);clearPending=false;target.textContent='전체 지우기';
+      }else if(action==='undo')session.history.undo();
+      else if(action==='redo')session.history.redo();
+      redraw();persist();
+    });
+    root.addEventListener('change',e=>{if(e.target.matches('select'))preferences.size=+e.target.value;if(e.target.matches('[data-ink-finger]'))preferences.finger=e.target.checked;});
+    store.get(id).then(page=>{
+      if(session.disposed)return;
+      session.history=new Timeline(page.strokes);session.updatedAt=page.updatedAt;session.loaded=true;status.textContent='이 기기에 자동 저장';redraw();
+    }).catch(()=>{status.textContent='필기를 불러오지 못했습니다.';notify('필기를 불러오지 못했습니다. 닫았다가 다시 열어 주세요.');});
+  }
+  function dispose() { if(active){active.finish?.();active.disposed=true;active=null;} }
+  async function flush() { active?.finish?.();if(active)await active.writes; }
+  window.addEventListener('pagehide',()=>active?.finish?.());
+  window.Notebook={mount,dispose,flush,store,cleanPage,Timeline};
+})();
+
+</script>
+  <script>
+(() => {
+  'use strict';
   const BANK = window.QUESTION_BANK;
   const app = document.getElementById('app');
   if (!BANK?.questions?.length) { app.innerHTML = '<main class="boot"><h1>문제를 불러오지 못했습니다.</h1><p>인터넷에 연결한 뒤 한 번 새로고침해 주세요.</p></main>'; return; }
   const questions = BANK.questions, byId = new Map(questions.map(q => [q.id, q]));
   const KEY = 'ipe-code-practice-v1';
+  const APP_VERSION = '1.1.0';
   const names = {c:'C',java:'Java',python:'Python'};
   const levels = {1:'기본',2:'응용',3:'심화'};
   const icon = (name) => {
@@ -51,7 +289,7 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.code}</svg>`;
   };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const defaults = () => ({schema:1,history:{},bookmarks:[],notes:{},settings:{theme:'system',codeSize:15,timer:false,whitespace:false},active:null});
+  const defaults = () => ({schema:1,history:{},bookmarks:[],notes:{},settings:{theme:'system',codeSize:15,timer:false,whitespace:false,codeWrap:true,formatCode:true},active:null});
   let storageOk = true;
   let state = defaults();
   try { const raw = JSON.parse(localStorage.getItem(KEY) || 'null'); if (raw?.schema === 1) state = {...state,...raw,settings:{...state.settings,...raw.settings}}; }
@@ -64,6 +302,7 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
   let filters = {language:'all',topic:'all',kind:'all',level:'all',status:'all',search:''};
   let listLimit = 36, offlineReady = false, offlineError = false, installPrompt = null, toastTimer, searchTimer, inputTimer;
   let reviewTab = 'wrong';
+  let notebookOpen=false,notebookTab='text',notebookLarge=false;
   const save = () => { try { localStorage.setItem(KEY,JSON.stringify(state)); storageOk=true; } catch { storageOk=false; toast('기록을 저장하지 못했습니다. 설정에서 백업해 주세요.'); } };
   const stat = () => {
     const records = Object.entries(state.history).filter(([id])=>byId.has(id));
@@ -82,14 +321,15 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
   const go = (page) => { if(route===page){render();return;} location.hash=page; };
   window.addEventListener('hashchange',()=>{route=location.hash.slice(1)||'home';render(true);});
   const nav = (mobile=false) => [['home','home','홈'],['library','book','문제은행'],['review','review','복습'],['stats','chart','학습 기록'],['settings','settings','설정']].map(([key,ic,label])=>`<button class="nav-btn ${route===key?'active':''}" data-action="nav" data-page="${key}" ${route===key?'aria-current="page"':''}>${icon(ic)}<span>${label}</span></button>`).join('');
-  const shell = (body) => `<aside class="sidebar"><a class="brand" href="#home"><span class="brand-mark">{ }</span><span>코드 한 문제<small>정처기 실기 · PROGRAMMING</small></span></a><nav class="side-nav" aria-label="주 메뉴">${nav()}</nav><div class="side-footer"><span class="offline-dot ${offlineReady?'ready':''}"></span>${offlineReady?'오프라인 풀이 준비 완료':offlineError?'온라인으로 사용 가능':'오프라인 준비 중'}<br><span>검증된 ${BANK.count}문항 · ${BANK.version}</span></div></aside><div class="shell-main"><header class="topbar"><span class="crumb">정처기 실기 / 프로그래밍 연습</span><div class="row"><button class="text-btn" data-action="install">홈 화면에 추가</button><button class="icon-btn" data-action="help" aria-label="앱 사용 안내">${icon('help')}</button></div></header><main id="main" tabindex="-1">${!storageOk?'<div class="warning-banner">현재 기록 저장에 제한이 있습니다. 설정에서 학습 기록을 백업하세요.</div>':''}${!navigator.onLine?`<div class="offline-banner">인터넷 없이 학습 중입니다. 기록은 이 기기에 저장됩니다.</div>`:''}${body}</main></div><nav class="mobile-nav" aria-label="주 메뉴">${nav(true)}</nav>`;
+  const shell = (body) => `<aside class="sidebar"><a class="brand" href="#home"><span class="brand-mark">{ }</span><span>코드 한 문제<small>정처기 실기 · PROGRAMMING</small></span></a><nav class="side-nav" aria-label="주 메뉴">${nav()}</nav><div class="side-footer"><span class="offline-dot ${offlineReady?'ready':''}"></span>${offlineReady?'오프라인 풀이 준비 완료':offlineError?'온라인으로 사용 가능':'오프라인 준비 중'}<br><span>검증된 ${BANK.count}문항 · ${APP_VERSION}</span></div></aside><div class="shell-main"><header class="topbar"><span class="crumb">정처기 실기 / 프로그래밍 연습</span><div class="row"><button class="text-btn" data-action="install">홈 화면에 추가</button><button class="icon-btn" data-action="help" aria-label="앱 사용 안내">${icon('help')}</button></div></header><main id="main" tabindex="-1">${!storageOk?'<div class="warning-banner">현재 기록 저장에 제한이 있습니다. 설정에서 학습 기록을 백업하세요.</div>':''}${!navigator.onLine?`<div class="offline-banner">인터넷 없이 학습 중입니다. 기록은 이 기기에 저장됩니다.</div>`:''}${body}</main></div><nav class="mobile-nav" aria-label="주 메뉴">${nav(true)}</nav>`;
   function codeHTML(code,language,tools=false){
+    if(state.settings.formatCode!==false)code=window.CodeDisplay?.formatCode(code,language)||code;
     // Escape every character. Highlight only after tokenization, so code never becomes markup.
     const re=/(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:class|def|return|if|else|elif|for|while|switch|case|break|continue|static|int|char|void|new|public|private|extends|implements|try|catch|finally|except|raise|import|from|lambda|nonlocal|const|struct|enum|boolean|double|float|True|False|None|null|true|false)\b)/g;
     let at=0,result='',m;
     while((m=re.exec(code))){result+=esc(code.slice(at,m.index));let t=m[0];if(language==='python'&&t.startsWith('//')){result+=esc(t);at=m.index+t.length;continue;}result+=`<span class="${t.startsWith('//')||t.startsWith('#')?'comment':t[0]==='"'||t[0]==="'"?'string':'keyword'}">${esc(t)}</span>`;at=m.index+t.length;}
     result+=esc(code.slice(at));
-    return `<div class="code-block"><div class="code-head"><span>${names[language]} ${language==='python'?'3':language==='java'?'17':'11'} · 코드 읽기</span>${tools?'<span class="code-tools"><button data-action="font-down" aria-label="코드 글자 작게">A−</button><button data-action="font-up" aria-label="코드 글자 크게">A+</button></span>':''}</div><pre><code class="code-text">${result}</code></pre></div>`;
+    return `<div class="code-block ${state.settings.codeWrap!==false?'code-wrap':''}"><div class="code-head"><span>${names[language]} ${language==='python'?'3':language==='java'?'17':'11'} · 코드 읽기</span>${tools?`<span class="code-tools">${language!=='python'?`<button class="code-option" data-action="code-format" aria-pressed="${state.settings.formatCode!==false}">${state.settings.formatCode!==false?'정돈한 코드':'원본 코드'}</button>`:''}<button class="code-option" data-action="wrap-code" aria-pressed="${state.settings.codeWrap!==false}">자동 줄바꿈 ${state.settings.codeWrap!==false?'켬':'끔'}</button><button data-action="font-down" aria-label="코드 글자 작게">A−</button><button data-action="font-up" aria-label="코드 글자 크게">A+</button></span>`:''}</div><pre><code class="code-text">${result}</code></pre></div>`;
   }
   const uniqueDone = language => questions.filter(q=>q.language===language&&(state.history[q.id]?.attempts||0)>0).length;
   function home(){
@@ -137,7 +377,10 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     if(!result)return '';
     const type=result.revealed?'revealed':result.correct?'correct':'wrong';
     const mine=q.mode==='choice'?q.options[result.value]:result.value;
-    return `<section class="result-panel" aria-live="polite"><h3 class="result-title ${type}" id="result-heading" tabindex="-1">${icon(type==='correct'?'check':type==='wrong'?'close':'book')}${type==='correct'?'정답입니다.':type==='wrong'?'한 번 더 확인해 보세요.':'해설을 확인했습니다.'}</h3>${!result.revealed?`<div class="output-label">내 답</div><pre class="output-box">${esc(visibleOutput(mine))}</pre>`:''}<div class="output-label">${q.mode==='output'?'정답 출력':'정답 / 모범 수정안'}</div><pre class="output-box">${esc(visibleOutput(q.answer))}</pre><p class="explanation">${esc(q.explanation)}</p>${q.trace?.length?`<div class="trace-wrap"><table class="trace-table"><caption class="field-label" style="text-align:left">중간 상태 추적</caption><thead><tr>${q.trace[0].map(x=>`<th scope="col">${esc(x)}</th>`).join('')}</tr></thead><tbody>${q.trace.slice(1).map(row=>`<tr>${row.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:''}${q.solution?`<details><summary>완성한 코드 보기</summary>${codeHTML(q.solution,q.language)}</details>`:''}<details><summary>나의 오답 메모</summary><label class="field-label" for="note-input">다음에는 무엇을 확인할까요?</label><textarea class="note-input" id="note-input" maxlength="3000" placeholder="예: 필드는 참조 타입, 메서드는 실제 객체">${esc(state.notes[q.id]||'')}</textarea></details>${q.mode==='text'&&!result.correct&&!result.revealed?'<button class="secondary" data-action="self-correct" style="margin-top:12px">해설과 비교했어요 · 내 표현도 정답</button>':''}<button class="text-btn" data-action="retry-current" style="margin-top:9px">이 문제 다시 풀기</button></section>`;
+    return `<section class="result-panel" aria-live="polite"><h3 class="result-title ${type}" id="result-heading" tabindex="-1">${icon(type==='correct'?'check':type==='wrong'?'close':'book')}${type==='correct'?'정답입니다.':type==='wrong'?'한 번 더 확인해 보세요.':'해설을 확인했습니다.'}</h3>${!result.revealed?`<div class="output-label">내 답</div><pre class="output-box">${esc(visibleOutput(mine))}</pre>`:''}<div class="output-label">${q.mode==='output'?'정답 출력':'정답 / 모범 수정안'}</div><pre class="output-box">${esc(visibleOutput(q.answer))}</pre><p class="explanation">${esc(q.explanation)}</p>${q.trace?.length?`<div class="trace-wrap"><table class="trace-table"><caption class="field-label" style="text-align:left">중간 상태 추적</caption><thead><tr>${q.trace[0].map(x=>`<th scope="col">${esc(x)}</th>`).join('')}</tr></thead><tbody>${q.trace.slice(1).map(row=>`<tr>${row.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:''}${q.solution?`<details><summary>완성한 코드 보기</summary>${codeHTML(q.solution,q.language)}</details>`:''}<details><summary>나의 오답 메모</summary><label class="field-label" for="note-input">다음에는 무엇을 확인할까요?</label><textarea class="note-input" id="note-input" maxlength="10000" placeholder="예: 필드는 참조 타입, 메서드는 실제 객체">${esc(state.notes[q.id]||'')}</textarea></details>${q.mode==='text'&&!result.correct&&!result.revealed?'<button class="secondary" data-action="self-correct" style="margin-top:12px">해설과 비교했어요 · 내 표현도 정답</button>':''}<button class="text-btn" data-action="retry-current" style="margin-top:9px">이 문제 다시 풀기</button></section>`;
+  }
+  function notebookHTML(q){
+    return `<section class="scratchpad ${notebookLarge&&notebookOpen?'is-large':''}" aria-label="문제별 풀이 노트"><div class="scratch-head"><div><b>풀이 노트</b><small>${q.id} · 메모와 손필기</small></div><div class="row">${notebookOpen?`<button class="text-btn" data-action="notebook-large" aria-pressed="${notebookLarge}">${notebookLarge?'작게 보기':'크게 보기'}</button>`:''}<button class="secondary" data-action="notebook-toggle" aria-expanded="${notebookOpen}" aria-controls="scratch-content">${notebookOpen?'노트 닫기':'메모·그림장 열기'}</button></div></div>${notebookOpen?`<div id="scratch-content"><div class="tabs notebook-tabs" role="group" aria-label="풀이 노트 종류"><button class="tab ${notebookTab==='text'?'active':''}" data-action="notebook-tab" data-tab="text" aria-pressed="${notebookTab==='text'}">텍스트 메모</button><button class="tab ${notebookTab==='draw'?'active':''}" data-action="notebook-tab" data-tab="draw" aria-pressed="${notebookTab==='draw'}">손필기·그림장</button></div>${notebookLarge?`<details class="notebook-code"><summary>문제 코드 펼치기</summary>${codeHTML(q.code,q.language)}</details>`:''}${notebookTab==='text'?`<label class="field-label" for="scratch-note">변수 값, 호출 순서, 헷갈리는 점을 적어 두세요.</label><textarea class="scratch-text" id="scratch-note" maxlength="10000" placeholder="i=0 → sum=0\ni=1 → sum=3\n포인터가 가리키는 곳은?">${esc(state.notes[q.id]||'')}</textarea><p class="ink-tip">문제별로 자동 저장됩니다. 정답 아래의 오답 메모와 같은 메모입니다.</p>`:'<div id="ink-pad"></div>'}</div>`:''}</section>`;
   }
   function practice(){
     const s=state.active;if(!s)return `<section class="panel empty"><h2>먼저 풀 문제를 골라 주세요.</h2><button class="primary" data-action="nav" data-page="library" style="margin-top:20px">문제은행으로</button></section>`;
@@ -145,7 +388,7 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     s.index=Math.max(0,Math.min(s.index,s.ids.length-1));const q=byId.get(s.ids[s.index]),r=s.results[q.id],draft=s.drafts[q.id]??'';
     if(!s.optionOrder[q.id]&&q.mode==='choice'){s.optionOrder[q.id]=shuffle(q.options.map((_,i)=>i));save();}
     const attempted=Object.keys(s.results).length;
-    return `<header class="session-top"><div class="row between"><div><div class="eyebrow">${esc(s.label)}</div><h1>${s.index+1}번째 문제</h1></div><div class="row"><button class="icon-btn ${state.bookmarks.includes(q.id)?'saved':''}" data-action="bookmark" aria-label="${state.bookmarks.includes(q.id)?'즐겨찾기 해제':'즐겨찾기 추가'}" aria-pressed="${state.bookmarks.includes(q.id)}">${icon('star')}</button><button class="text-btn" data-action="finish">결과 보기</button></div></div><div class="session-info"><span>${attempted} / ${s.ids.length}문항 확인 · ${q.id}</span><span id="timer" class="timer">${timeText()}</span></div><div class="session-progress"><span style="width:${attempted/s.ids.length*100}%"></span></div></header><div class="quiz-grid"><section class="panel question-panel"><div class="question-meta"><span class="pill blue">${names[q.language]}</span><span class="pill">${levels[q.level]}</span><span class="pill">${esc(q.kind)}</span><span class="pill green">실행 검증</span></div><h2>${esc(q.title)}</h2><p class="question-prompt">${esc(q.prompt)}</p>${codeHTML(q.code,q.language,true)}<p class="muted" style="font-size:11px;margin-top:12px">${q.core?'대표 문제':`같은 코드 유형의 데이터 변형 ${q.variant}/4`} · C는 필요한 표준 헤더와 ASCII 문자를 가정합니다.</p></section><section class="panel answer-panel"><label class="answer-label" for="answer-input">${q.mode==='choice'?'정답을 선택하세요.':q.mode==='text'?'빈칸·수정안을 적으세요.':'예상 출력을 적으세요.'}</label><p class="answer-hint">${q.mode==='output'?'마지막 줄바꿈과 줄 끝 공백은 채점에서 제외합니다. 중간 공백·대소문자는 구분합니다.':q.mode==='text'?'식의 공백·끝 세미콜론은 무시합니다. 다른 정답 표현은 해설과 비교해 직접 정답으로 표시할 수 있습니다.':'선택한 뒤 정답 확인을 누르세요.'}</p>${q.mode==='choice'?`<div class="choice-list" role="radiogroup" aria-label="정답 선택">${s.optionOrder[q.id].map((index,i)=>`<label class="choice"><input type="radio" name="choice" value="${index}" ${String(draft)===String(index)?'checked':''} ${r?'disabled':''}><span class="muted" style="font-size:11px">${i+1}</span><pre>${esc(q.options[index])}</pre></label>`).join('')}</div>`:`<textarea id="answer-input" class="answer-input" autocomplete="off" autocapitalize="off" spellcheck="false" ${r?'disabled':''} placeholder="${q.mode==='output'?'출력 결과를 입력하세요.':'빈칸에 들어갈 식 또는 키워드'}">${esc(draft)}</textarea>`}<div class="answer-actions"><button class="primary" data-action="submit" ${r?'disabled':''}>${r?'정답 확인 완료':'정답 확인'}</button>${!r?'<button class="reveal-btn" data-action="reveal">잘 모르겠어요 · 답과 해설 보기</button>':''}</div>${resultHTML(q,r)}<div class="next-row"><button class="secondary" data-action="previous" ${s.index===0?'disabled':''}>이전</button><button class="primary" data-action="next">${s.index===s.ids.length-1?'풀이 결과 보기':r?'다음 문제 →':'건너뛰고 다음 →'}</button></div></section></div><div class="question-nav" role="group" aria-label="세션 문제 이동">${s.ids.map((id,i)=>`<button data-action="jump" data-index="${i}" class="${i===s.index?'current':''} ${s.results[id]?.revealed?'revealed':s.results[id]?s.results[id].correct?'correct':'wrong':''}" aria-label="${i+1}번 문제${s.results[id]?', '+(s.results[id].correct?'정답':'복습 필요'):''}" ${i===s.index?'aria-current="step"':''}>${i+1}</button>`).join('')}</div>`;
+    return `<header class="session-top"><div class="row between"><div><div class="eyebrow">${esc(s.label)}</div><h1>${s.index+1}번째 문제</h1></div><div class="row"><button class="icon-btn ${state.bookmarks.includes(q.id)?'saved':''}" data-action="bookmark" aria-label="${state.bookmarks.includes(q.id)?'즐겨찾기 해제':'즐겨찾기 추가'}" aria-pressed="${state.bookmarks.includes(q.id)}">${icon('star')}</button><button class="text-btn" data-action="finish">결과 보기</button></div></div><div class="session-info"><span>${attempted} / ${s.ids.length}문항 확인 · ${q.id}</span><span id="timer" class="timer">${timeText()}</span></div><div class="session-progress"><span style="width:${attempted/s.ids.length*100}%"></span></div></header><div class="quiz-grid"><section class="panel question-panel"><div class="question-meta"><span class="pill blue">${names[q.language]}</span><span class="pill">${levels[q.level]}</span><span class="pill">${esc(q.kind)}</span><span class="pill green">실행 검증</span></div><h2>${esc(q.title)}</h2><p class="question-prompt">${esc(q.prompt)}</p>${codeHTML(q.code,q.language,true)}<p class="muted" style="font-size:11px;margin-top:12px">${q.core?'대표 문제':`같은 코드 유형의 데이터 변형 ${q.variant}/4`} · C는 필요한 표준 헤더와 ASCII 문자를 가정합니다.</p>${notebookHTML(q)}</section><section class="panel answer-panel"><label class="answer-label" for="answer-input">${q.mode==='choice'?'정답을 선택하세요.':q.mode==='text'?'빈칸·수정안을 적으세요.':'예상 출력을 적으세요.'}</label><p class="answer-hint">${q.mode==='output'?'마지막 줄바꿈과 줄 끝 공백은 채점에서 제외합니다. 중간 공백·대소문자는 구분합니다.':q.mode==='text'?'식의 공백·끝 세미콜론은 무시합니다. 다른 정답 표현은 해설과 비교해 직접 정답으로 표시할 수 있습니다.':'선택한 뒤 정답 확인을 누르세요.'}</p>${q.mode==='choice'?`<div class="choice-list" role="radiogroup" aria-label="정답 선택">${s.optionOrder[q.id].map((index,i)=>`<label class="choice"><input type="radio" name="choice" value="${index}" ${String(draft)===String(index)?'checked':''} ${r?'disabled':''}><span class="muted" style="font-size:11px">${i+1}</span><pre>${esc(q.options[index])}</pre></label>`).join('')}</div>`:`<textarea id="answer-input" class="answer-input" autocomplete="off" autocapitalize="off" spellcheck="false" ${r?'disabled':''} placeholder="${q.mode==='output'?'출력 결과를 입력하세요.':'빈칸에 들어갈 식 또는 키워드'}">${esc(draft)}</textarea>`}<div class="answer-actions"><button class="primary" data-action="submit" ${r?'disabled':''}>${r?'정답 확인 완료':'정답 확인'}</button>${!r?'<button class="reveal-btn" data-action="reveal">잘 모르겠어요 · 답과 해설 보기</button>':''}</div>${resultHTML(q,r)}<div class="next-row"><button class="secondary" data-action="previous" ${s.index===0?'disabled':''}>이전</button><button class="primary" data-action="next">${s.index===s.ids.length-1?'풀이 결과 보기':r?'다음 문제 →':'건너뛰고 다음 →'}</button></div></section></div><div class="question-nav" role="group" aria-label="세션 문제 이동">${s.ids.map((id,i)=>`<button data-action="jump" data-index="${i}" class="${i===s.index?'current':''} ${s.results[id]?.revealed?'revealed':s.results[id]?s.results[id].correct?'correct':'wrong':''}" aria-label="${i+1}번 문제${s.results[id]?', '+(s.results[id].correct?'정답':'복습 필요'):''}" ${i===s.index?'aria-current="step"':''}>${i+1}</button>`).join('')}</div>`;
   }
   function timeText(){const s=state.active;if(!s)return '';const elapsed=Math.max(0,Date.now()-s.startedAt);const ms=s.limitMs?Math.max(0,s.limitMs-elapsed):elapsed;return `${s.limitMs?'남은 시간':'학습 시간'} ${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;}
   function summary(){
@@ -156,21 +399,26 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     const s=stat();const groups=new Map();for(const q of questions){const key=q.language+'|'+q.topic;if(!groups.has(key))groups.set(key,{language:q.language,topic:q.topic,total:0,done:0,wrong:0});const g=groups.get(key);g.total++;if(state.history[q.id]?.attempts>0)g.done++;if(['wrong','revealed'].includes(state.history[q.id]?.lastStatus))g.wrong++;}
     return `<div class="library-header"><div class="eyebrow">YOUR LEARNING RECORD</div><h1>지금까지의 발자취</h1><p>진도는 한 번 이상 답을 제출한 문제 수입니다. 정답률은 실제 제출 횟수 기준입니다.</p></div><section class="panel"><div class="mini-stats"><div><b>${s.completed} / ${BANK.count}</b><span>풀어 본 문제</span></div><div><b>${s.attempts}</b><span>답안 제출</span></div><div><b>${s.accuracy===null?'—':s.accuracy+'%'}</b><span>제출 정답률</span></div><div><b>${state.bookmarks.length}</b><span>즐겨찾기</span></div></div></section><div class="section-head"><h2>유형별 진도</h2></div><section class="topic-grid">${[...groups.values()].map(g=>`<div class="topic-stat"><div class="row between"><b style="font-size:13px">${names[g.language]} · ${esc(g.topic)}</b><small>${g.done}/${g.total}</small></div><div class="thin-progress"><span style="width:${g.done/g.total*100}%"></span></div>${g.wrong?`<small>다시 볼 문제 ${g.wrong}개</small>`:'<small>차근차근 채워 보세요.</small>'}</div>`).join('')}</section>`;
   }
-  function settings(){return `<div class="library-header"><div class="eyebrow">MAKE IT YOURS</div><h1>편한 환경으로 공부하세요.</h1><p>학습 기록은 현재 브라우저·기기에 저장됩니다.</p></div><div class="settings-grid"><section class="panel"><h2>화면과 풀이</h2><div class="setting-row"><label for="theme">화면 테마</label><select id="theme" data-setting="theme">${[['system','기기 설정'],['light','라이트'],['dark','다크']].map(([k,v])=>option(k,v,state.settings.theme)).join('')}</select></div><div class="setting-row"><label for="code-size">코드 글자 크기<small>문제 화면의 A− / A+로도 바꿀 수 있습니다.</small></label><select id="code-size" data-setting="codeSize">${[13,14,15,16,17,18,19,20].map(n=>option(String(n),n+'px',String(state.settings.codeSize))).join('')}</select></div><div class="setting-row"><label for="timer-setting">새 세션에 20분 타이머<small>시간이 끝나도 답안은 보존되며 계속 풀 수 있습니다.</small></label><input type="checkbox" id="timer-setting" data-setting="timer" ${state.settings.timer?'checked':''}></div><div class="setting-row"><label for="space-setting">정답에서 공백·줄바꿈 표시<small>공백 · / 줄바꿈 ↵ 표시로 출력 형식을 확인합니다.</small></label><input type="checkbox" id="space-setting" data-setting="whitespace" ${state.settings.whitespace?'checked':''}></div></section><section class="panel"><h2>학습 기록 백업</h2><p class="info-copy" style="margin:12px 0 17px">Android와 iPad의 기록은 자동 동기화되지 않습니다. 현재 기기에서 백업 파일을 내보내 다른 기기로 옮긴 뒤 가져오세요. 기존 기록과 병합하며 같은 파일을 다시 가져와도 횟수가 중복 합산되지 않습니다.</p><div class="row wrap"><button class="primary" data-action="export">백업 내보내기</button><button class="secondary" data-action="import">백업 가져오기</button></div></section><section class="panel"><h2>홈 화면·오프라인</h2><p class="info-copy" style="margin:12px 0">${offlineReady?'이 기기에 문제와 앱 파일을 저장했습니다. 인터넷 없이 다시 열어 풀 수 있습니다.':offlineError?'오프라인 파일 저장을 완료하지 못했습니다. 인터넷에 연결한 상태로 다시 열어 주세요.':'앱과 문제를 이 기기에 저장하는 중입니다. 처음 한 번은 인터넷 연결이 필요합니다.'} 브라우저 데이터를 지우면 학습 기록과 오프라인 파일도 사라질 수 있으니 백업해 두세요.</p><button class="secondary" data-action="install">설치 방법 보기</button></section><section class="panel"><h2>문제 구성</h2><p class="info-copy" style="margin:12px 0">C·Java·Python 각120문항, 총360문항입니다. 대표 문제72개와 새 코드 유형72개의 데이터 변형4개를 포함합니다. 모든 문제는 자체 제작이며 기출 원문이 아닙니다. 빈칸·오류 수정형은 모범 수정 코드, 나머지는 제시 코드의 실행 결과를 검증했습니다. 난이도는 학습용 분류입니다.</p><p class="info-copy">앱 버전 ${BANK.version} · Python 3 / C11 / Java17<br>답안은 기기에서 비교하며 사용자가 쓴 코드를 서버로 전송하거나 실행하지 않습니다.</p></section></div>`;}
+  function settings(){return `<div class="library-header"><div class="eyebrow">MAKE IT YOURS</div><h1>편한 환경으로 공부하세요.</h1><p>학습 기록은 현재 브라우저·기기에 저장됩니다.</p></div><div class="settings-grid"><section class="panel"><h2>화면과 풀이</h2><div class="setting-row"><label for="theme">화면 테마</label><select id="theme" data-setting="theme">${[['system','기기 설정'],['light','라이트'],['dark','다크']].map(([k,v])=>option(k,v,state.settings.theme)).join('')}</select></div><div class="setting-row"><label for="code-size">코드 글자 크기<small>문제 화면의 A− / A+로도 바꿀 수 있습니다.</small></label><select id="code-size" data-setting="codeSize">${[13,14,15,16,17,18,19,20].map(n=>option(String(n),n+'px',String(state.settings.codeSize))).join('')}</select></div><div class="setting-row"><label for="timer-setting">새 세션에 20분 타이머<small>시간이 끝나도 답안은 보존되며 계속 풀 수 있습니다.</small></label><input type="checkbox" id="timer-setting" data-setting="timer" ${state.settings.timer?'checked':''}></div><div class="setting-row"><label for="space-setting">정답에서 공백·줄바꿈 표시<small>공백 · / 줄바꿈 ↵ 표시로 출력 형식을 확인합니다.</small></label><input type="checkbox" id="space-setting" data-setting="whitespace" ${state.settings.whitespace?'checked':''}></div></section><section class="panel"><h2>학습 기록 백업</h2><p class="info-copy" style="margin:12px 0 17px">Android와 iPad의 기록은 자동 동기화되지 않습니다. 메모와 그림장까지 백업 파일로 내보내 다른 기기로 옮긴 뒤 가져오세요. 기존 기록과 병합하며 같은 파일을 다시 가져와도 횟수가 중복 합산되지 않습니다.</p><div class="row wrap"><button class="primary" data-action="export">백업 내보내기</button><button class="secondary" data-action="import">백업 가져오기</button></div></section><section class="panel"><h2>홈 화면·오프라인</h2><p class="info-copy" style="margin:12px 0">${offlineReady?'이 기기에 문제와 앱 파일을 저장했습니다. 인터넷 없이 다시 열어 풀 수 있습니다.':offlineError?'오프라인 파일 저장을 완료하지 못했습니다. 인터넷에 연결한 상태로 다시 열어 주세요.':'앱과 문제를 이 기기에 저장하는 중입니다. 처음 한 번은 인터넷 연결이 필요합니다.'} 브라우저 데이터를 지우면 학습 기록과 오프라인 파일도 사라질 수 있으니 백업해 두세요.</p><button class="secondary" data-action="install">설치 방법 보기</button></section><section class="panel"><h2>문제 구성</h2><p class="info-copy" style="margin:12px 0">C·Java·Python 각120문항, 총360문항입니다. 대표 문제72개와 새 코드 유형72개의 데이터 변형4개를 포함합니다. 모든 문제는 자체 제작이며 기출 원문이 아닙니다. 빈칸·오류 수정형은 모범 수정 코드, 나머지는 제시 코드의 실행 결과를 검증했습니다. 난이도는 학습용 분류입니다.</p><p class="info-copy">앱 버전 ${APP_VERSION} · Python 3 / C11 / Java17<br>답안은 기기에서 비교하며 사용자가 쓴 코드를 서버로 전송하거나 실행하지 않습니다.</p></section></div>`;}
   function render(scroll=false){
+    window.Notebook?.dispose();
     applySettings();const activeId=document.activeElement?.id,selection=document.activeElement?.selectionStart;
     const views={home,library,review,practice,stats,settings};app.innerHTML=shell((views[route]||home)());
+    if(route==='practice'&&!state.active?.finished&&notebookOpen&&notebookTab==='draw')window.Notebook?.mount(document.getElementById('ink-pad'),current().id,toast);
     if(scroll){window.scrollTo({top:0,behavior:'instant'});document.getElementById('main')?.focus({preventScroll:true});}
     else if(activeId==='search'){const el=document.getElementById('search');el?.focus({preventScroll:true});if(typeof selection==='number')el?.setSelectionRange(selection,selection);}
   }
   function current(){return state.active?byId.get(state.active.ids[state.active.index]):null;}
   function move(index){const s=state.active;if(!s)return;s.index=Math.max(0,Math.min(s.ids.length-1,index));save();render(true);}
-  function exportBackup(){
-    const payload={app:'ipe-code-practice',schema:1,bankVersion:BANK.version,exportedAt:new Date().toISOString(),history:state.history,bookmarks:state.bookmarks,notes:state.notes,settings:state.settings};
+  async function exportBackup(){
+    await window.Notebook?.flush();
+    const drawings=window.Notebook?await window.Notebook.store.all():[];
+    const payload={app:'ipe-code-practice',schema:1,bankVersion:BANK.version,exportedAt:new Date().toISOString(),history:state.history,bookmarks:state.bookmarks,notes:state.notes,drawings,settings:state.settings};
     const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`코드한문제_학습백업_${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('백업 파일을 저장했습니다.');
   }
-  function importBackup(data){
+  async function importBackup(data){
     if(!data||data.app!=='ipe-code-practice'||data.schema!==1||!data.history||typeof data.history!=='object'||Array.isArray(data.history))throw new Error('이 앱의 백업 파일이 아닙니다.');
+    const drawingsAdded=window.Notebook?await window.Notebook.store.merge(data.drawings,new Set(byId.keys())):0;
     let n=0;
     for(const [id,value] of Object.entries(data.history)){
       if(!byId.has(id)||!value||typeof value!=='object')continue;
@@ -180,8 +428,8 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
       const old=state.history[id];if(!old||clean.seenAt>old.seenAt){state.history[id]={...clean,attempts:Math.max(old?.attempts||0,attempts),correctAttempts:Math.max(old?.correctAttempts||0,correctAttempts)};n++;}
     }
     if(Array.isArray(data.bookmarks))state.bookmarks=[...new Set([...state.bookmarks,...data.bookmarks.filter(id=>byId.has(id))])];
-    if(data.notes&&typeof data.notes==='object')for(const [id,note] of Object.entries(data.notes)){if(byId.has(id)&&typeof note==='string'&&!state.notes[id])state.notes[id]=note.slice(0,3000);}
-    save();render();toast(`${n}개 문제의 기록을 병합했습니다.`);
+    if(data.notes&&typeof data.notes==='object')for(const [id,note] of Object.entries(data.notes)){if(byId.has(id)&&typeof note==='string'&&!state.notes[id])state.notes[id]=note.slice(0,10000);}
+    save();render();toast(`${n}개 문제 기록과 ${drawingsAdded}개 그림장을 병합했습니다.`);
   }
   function help(install=false){
     const d=document.getElementById('help-dialog');
@@ -224,7 +472,12 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     else if(action==='reopen'&&s){s.finished=false;move(+el.dataset.index);}
     else if(action==='retry-session'&&s)start(s.ids.filter(id=>!s.results[id]?.correct).map(id=>byId.get(id)),'오답·미풀이 복습');
     else if(action==='font-up'||action==='font-down'){state.settings.codeSize=Math.max(13,Math.min(20,state.settings.codeSize+(action==='font-up'?1:-1)));save();applySettings();}
-    else if(action==='export')exportBackup();
+    else if(action==='notebook-toggle'){notebookOpen=!notebookOpen;if(!notebookOpen)notebookLarge=false;render();}
+    else if(action==='notebook-tab'){notebookTab=el.dataset.tab;render();}
+    else if(action==='notebook-large'){notebookLarge=!notebookLarge;render();}
+    else if(action==='code-format'){state.settings.formatCode=state.settings.formatCode===false;save();render();}
+    else if(action==='wrap-code'){state.settings.codeWrap=state.settings.codeWrap===false;save();render();}
+    else if(action==='export'){try{await exportBackup();}catch{toast('백업 파일을 만들지 못했습니다. 저장 공간과 다운로드 권한을 확인하세요.');}}
     else if(action==='import')document.getElementById('import-file').click();
     else if(action==='help')help();
     else if(action==='install')help(true);
@@ -241,13 +494,13 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     const el=event.target;
     if(el.id==='search'){clearTimeout(searchTimer);const value=el.value;searchTimer=setTimeout(()=>{filters.search=value;listLimit=36;render();},220);}
     if(el.id==='answer-input'&&current()){state.active.drafts[current().id]=el.value.slice(0,20000);clearTimeout(inputTimer);inputTimer=setTimeout(save,200);}
-    if(el.id==='note-input'&&current()){state.notes[current().id]=el.value.slice(0,3000);clearTimeout(inputTimer);inputTimer=setTimeout(save,200);}
+    if(['note-input','scratch-note'].includes(el.id)&&current()){state.notes[current().id]=el.value.slice(0,10000);const other=document.getElementById(el.id==='note-input'?'scratch-note':'note-input');if(other)other.value=el.value;clearTimeout(inputTimer);inputTimer=setTimeout(save,200);}
   });
-  document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&route==='practice'){event.preventDefault();document.querySelector('[data-action=submit]:not(:disabled)')?.click();}});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&notebookLarge){notebookLarge=false;render();return;}if((event.ctrlKey||event.metaKey)&&event.key==='Enter'&&route==='practice'){event.preventDefault();document.querySelector('[data-action=submit]:not(:disabled)')?.click();}});
   document.getElementById('import-file').addEventListener('change',async event=>{
     const file=event.target.files[0];event.target.value='';if(!file)return;
-    if(file.size>4*1024*1024){toast('백업 파일은 4MB 이하만 가져올 수 있습니다.');return;}
-    try{importBackup(JSON.parse(await file.text()));}catch(error){toast(error.message||'백업 파일을 읽지 못했습니다.');}
+    if(file.size>20*1024*1024){toast('백업 파일은 20MB 이하만 가져올 수 있습니다.');return;}
+    try{await importBackup(JSON.parse(await file.text()));}catch(error){toast(error.message||'백업 파일을 읽지 못했습니다.');}
   });
   setInterval(()=>{const el=document.getElementById('timer');if(el&&state.active&&!state.active.finished){el.textContent=timeText();el.classList.toggle('urgent',!!state.active.limitMs&&Date.now()-state.active.startedAt>state.active.limitMs-60000);}},1000);
   window.addEventListener('online',()=>{if(route==='settings'||route==='home')render();});
@@ -262,7 +515,7 @@ window.QUESTION_BANK={"version":"1.0.0","created":"2026-10-24","count":360,"lang
     navigator.serviceWorker.register('./sw.js',{scope:'./'}).then(()=>navigator.serviceWorker.ready).then(reg=>{reg.active?.postMessage({type:'STATUS'});}).catch(()=>{offlineError=true;if(route==='settings')render();});
   }else offlineError=true;
   // Pure functions used by the local test harness; no user code is evaluated.
-  window.CodePractice={normalizeOutput,normalizeCode,checkAnswer,importBackup,version:BANK.version};
+  window.CodePractice={normalizeOutput,normalizeCode,checkAnswer,importBackup,codeHTML,version:APP_VERSION};
 })();
 
 </script>
